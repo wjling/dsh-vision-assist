@@ -1,0 +1,42 @@
+{
+  "name": "dsh-vision-assist",
+  "version": "1.0.0",
+  "description": "DeepSeek Harness 视觉助手插件：给没有视觉能力的模型配一个可随时切换的多模态识别模型。输入框图片自动落盘并改写为文本提示，主模型调用 vision_recognize 工具即可完成看图；识别模型在 settings 的 vision-bridge 命名空间热更新切换。",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/index.js",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "cordis.patch.yml"
+    }
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh-llm": "0.1.0-rc.8",
+    "@deepseek-ai/dsh-settings": "0.1.0-rc.8",
+    "@deepseek-ai/dsh-tools": "0.1.0-rc.8",
+    "@deepseek-ai/schemastery": "^3.18.1"
+  },
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "vision",
+    "multimodal",
+    "image",
+    "ocr"
+  ],
+  "license": "MIT"
+}
