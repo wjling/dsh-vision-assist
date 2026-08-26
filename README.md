@@ -22,9 +22,10 @@ dsh plugin --profile web add dsh-vision-assist
 # 重启 DSH 生效
 ```
 
-> 插件依赖 `@deepseek-ai/dsh-llm` / `dsh-settings` / `dsh-tools`（锁定
-> `0.1.0-rc.8`，与开发时使用的 DSH 版本一致）与 `schemastery`，全部为常规
-> dependencies，由包管理器随插件一起安装，无需任何额外配置。
+> 宿主共享包 `@deepseek-ai/dsh-llm` / `dsh-settings` / `dsh-tools` 按
+> **peerDependencies** 声明（运行时由 DSH 宿主提供，不遮蔽宿主版本）；
+> 开发环境通过 devDependencies 安装同名版本用于本地解析。`schemastery`
+> 是唯一常规依赖。
 
 ## 配置
 
