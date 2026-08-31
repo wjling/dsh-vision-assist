@@ -1,26 +1,37 @@
 {
   "name": "dsh-vision-assist",
   "version": "1.0.0",
-  "description": "DeepSeek Harness 视觉助手插件：给没有视觉能力的模型配一个可随时切换的多模态识别模型。输入框图片自动落盘并改写为文本提示，主模型调用 vision_recognize 工具即可完成看图；识别模型在 settings 的 vision-bridge 命名空间热更新切换。",
+  "description": "DeepSeek Harness 视觉助手插件：给没有视觉能力的模型配一个可随时切换的多模态识别模型。输入框图片自动落盘并改写为文本提示，主模型调用 vision_recognize 工具即可完成看图；识别模型在 settings 的 vision-assist 命名空间热更新切换。",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
     ".": "./lib/index.js",
+    "./client": "./lib/client.js",
     "./cordis.patch.yml": "./cordis.patch.yml",
     "./package.json": "./package.json"
   },
   "files": [
     "lib/index.js",
+    "lib/client.js",
     "cordis.patch.yml",
     "README.md",
     "LICENSE"
   ],
+  "scripts": {
+    "build:client": "npx -y esbuild@0.25.5 src/client.js --bundle --format=cjs --platform=browser --external:react --external:react/jsx-runtime --outfile=lib/client.js --banner:js='window.__ModuleLoader__.load({id:\"dsh-vision-assist\",factory:(require)=>{var module={exports:{}};var exports=module.exports;' --footer:js='exports.apply=apply;exports.inject=inject;return module.exports;}});'"
+  },
   "engines": {
     "node": ">=20"
   },
   "dsh": {
     "bundle": {
       "patch": "cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime"
+      ],
+      "platform": "web"
     }
   },
   "dependencies": {

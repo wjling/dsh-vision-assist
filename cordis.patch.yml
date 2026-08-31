@@ -1,15 +1,15 @@
-# dsh-vision-bridge — 视觉桥：无视觉主模型 + 可选多模态识别模型
+# dsh-vision-assist — 视觉助手：无视觉主模型 + 可选多模态识别模型
 #
-# 宿主侧注册本插件（id: vision-bridge）。能力：
+# 宿主侧注册本插件（id: vision-assist）。能力：
 #   1. vision_recognize 工具：用 settings 里选定的多模态模型识别本地图片；
-#   2. 输入框图片拦截：主模型无视觉时，把图片块改写成"本地路径 + 调用
-#      vision_recognize"的文本，避免 llm-pi-ai 因 model 无 image 输入而整轮报错；
-#   3. settings 命名空间 vision-bridge（热更新）：
-#        vision-bridge:
+#   2. 模型调用边界图片改写：主模型无视觉时，把发往该模型的请求里的图片块
+#      改写成"本地路径 + 调用 vision_recognize"的文本（界面与原消息不动）；
+#   3. settings 命名空间 vision-assist（热更新）：
+#        vision-assist:
 #          enabled: true
 #          provider: codemaker          # 视觉模型所在 provider
 #          model: gemini-3.7-flash      # 视觉模型 id
 #          timeoutMs: 120000
 - insert:
-    - id: vision-bridge
+    - id: vision-assist
       name: dsh-vision-assist
