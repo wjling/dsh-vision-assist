@@ -1,11 +1,35 @@
 # dsh-vision-assist
 
-DeepSeek Harness 视觉助手插件：给**没有视觉能力的主模型**配一个**可随时切换的多模态识别模型**，让输入框图片开箱即用。
+> **Vision for text-only models in DeepSeek Harness (DSH).** Give a model that cannot
+> see images a pluggable multimodal "vision sidecar": paste an image and recognition is
+> handed to a configurable VLM, so the conversation never trips the
+> `model does not support image input` rejection.
+>
+> **🇨🇳 中文**：给没有视觉能力的主模型配一个可随时切换的多模态识别模型，输入框图片开箱即用。
 
-主模型（如 `deepseek-v4-pro`）不支持图片输入时，在输入框贴图发送会整轮报错
-（`pi-ai model "..." does not support image input`）。本插件在**模型调用边界**拦截图片，
-把发往无视觉模型的请求里的图片块换成"本地路径 + 工具调用指引"（消息本体与界面显示不动），
-主模型调用 `vision_recognize` 即可完成看图——识别工作由你在 settings 里选定的多模态模型完成。
+![dsh-plugin](https://img.shields.io/badge/topic-dsh--plugin-blue) ![license](https://img.shields.io/badge/license-MIT-green) ![node](https://img.shields.io/badge/node-%3E%3D20-blue)
+
+When the routed model cannot accept images, this plugin intercepts the request at the
+LLM call boundary and rewrites the image blocks into a "local attachment path + a call
+to `vision_recognize`" text hint. The message body and the UI history keep the original
+image; only the request sent to the vision-less model is rewritten. The actual
+recognition is done by the multimodal model you pick in settings.
+
+```bash
+# install from this repo
+dsh plugin --profile web add github:wjling/dsh-vision-assist
+# restart DSH to activate
+```
+
+```bash
+# local development
+git clone https://github.com/wjling/dsh-vision-assist
+cd dsh-vision-assist
+pnpm install
+pnpm run build:client   # rebuild lib/client.js after editing src/client.js
+```
+
+---
 
 ## 功能
 
@@ -20,7 +44,7 @@ DeepSeek Harness 视觉助手插件：给**没有视觉能力的主模型**配�
 ## 安装
 
 ```bash
-dsh plugin --profile web add dsh-vision-assist
+dsh plugin --profile web add github:wjling/dsh-vision-assist
 # 重启 DSH 生效
 ```
 
