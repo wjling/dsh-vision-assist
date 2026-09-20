@@ -115,7 +115,10 @@ function VisionAssistCard() {
 	);
 	useEffect(() => {
 		if (state.status === "loading") refresh();
-		if (state.optionsStatus === "loading") loadOptions();
+		// 每次都重取：provider/模型列表来自 llm-pi-ai，它的改动不会改本命名空间的 revision，
+		// 而 state 是模块级的（页面生命周期内常驻）。只按 "loading 才取" 会让下拉冻结在
+		// 打开页面那一刻的 settings.yaml —— 同步完模型后必须手动刷页面才看得到。
+		loadOptions();
 	}, []);
 
 	if (snapshot.status !== "ready") {
