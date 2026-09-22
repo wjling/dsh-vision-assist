@@ -59,12 +59,15 @@ Loader 条目 config；旧版本 DSH 请用 v1.0.0）。
 
 ## 配置
 
-**方式一：DSH 设置页**（推荐）——设置 → 插件 → 「视觉助手 vision-assist」卡片：
+**方式一：卡片设置页**（推荐）——侧边栏「插件」面板 →「官方」分组 → 「视觉助手 vision-assist」
+卡片 → 详情页：
 
 - 启用识别接管（总开关）
 - 识别模型 provider（下拉：来自 `llm-pi-ai` 已配置的 provider）
 - 识别模型 model（下拉：优先列出声明了图片输入的模型）
 - 识别超时（毫秒，1000–600000）
+
+改动后点「保存」即时生效，每项右侧有「恢复默认」。
 
 **方式二：profile patch**（与设置页写的是同一份配置，改完重启或热更新）：
 
@@ -112,6 +115,8 @@ internal 标记，不会被自己改写。
 ## 兼容性
 
 - 目标环境：DSH `0.1.7-alpha.1`，Node ≥ 20
+- 版本变更、以及跨 DSH 大版本的配置迁移说明见 [CHANGELOG.md](CHANGELOG.md)
+  （`v1.0.0` 面向 rc.8 时代，`v1.1.0` 起要求 DSH ≥ 0.1.7-alpha.1）
 - 插件全部逻辑在用户空间（`~/.dsh` + 插件包本体），**更新 DSH 后无需任何重装或补丁**
 - host + client 双段：
   - host 段用 `@deepseek-ai/dsh-llm` 的 `prepareCall` / `stream` / `resolveModelInfo`、
@@ -125,8 +130,8 @@ internal 标记，不会被自己改写。
 
 - **图片会不会丢？** 不会。原图始终保存在 `~/.dsh/attachments/v1/objects/`（内容寻址），
   界面与会话历史保留图片，只有"发往无视觉模型的那次请求"里被替换为识别指引。
-- **怎么换识别模型？** 设置 → 插件 → 「视觉助手 vision-assist」卡片里改 provider/model，
-  保存即生效。
+- **怎么换识别模型？** 侧边栏「插件」面板 →「官方」分组 → 「视觉助手 vision-assist」卡片里改
+  provider/model，保存即生效。
 - **识别模型报 "does not support image input"？** 该模型在 `llm-pi-ai` 里没声明
   `input: [text, image]`，补上声明后重试。
 - **会话切成视觉模型后图片没有改写，正常吗？** 正常——插件只干预无视觉的模型。
