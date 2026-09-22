@@ -1,15 +1,17 @@
 # dsh-vision-assist — 视觉助手：无视觉主模型 + 可选多模态识别模型
 #
-# 宿主侧注册本插件（id: vision-assist）。能力：
-#   1. vision_recognize 工具：用 settings 里选定的多模态模型识别本地图片；
+# 宿主侧注册本插件（id: vision-assist，同时就是设置命名空间）。能力：
+#   1. vision_recognize 工具：用设置里选定的多模态模型识别本地图片；
 #   2. 模型调用边界图片改写：主模型无视觉时，把发往该模型的请求里的图片块
 #      改写成"本地路径 + 调用 vision_recognize"的文本（界面与原消息不动）；
-#   3. settings 命名空间 vision-assist（热更新）：
-#        vision-assist:
-#          enabled: true
-#          provider: codemaker          # 视觉模型所在 provider
-#          model: gemini-3.7-flash      # 视觉模型 id
-#          timeoutMs: 120000
+#   3. 配置写在本条目的 config 上（DSH 0.1.7 起的插件配置模型），设置页
+#      「插件 → 视觉助手」卡片可改；也可以在自己的 profile patch 里覆盖：
+#        - id: vision-assist
+#          config:
+#            enabled: true
+#            provider: codemaker          # 视觉模型所在 provider
+#            model: gemini-3.8-flash      # 视觉模型 id
+#            timeoutMs: 300000            # 单次识别超时（毫秒）
 - insert:
     - id: vision-assist
       name: dsh-vision-assist

@@ -1,101 +1,65 @@
-import { createElement, useEffect, useSyncExternalStore } from "react";
+import { createElement } from "react";
+import { SettingsForm, SettingsFormModel, settingsNumberField, settingsTextField } from "@deepseek-ai/dsh-client-ui-primitives";
 
-/** vision-assist 设置命名空间（与宿主侧 installSettingsSection 一致）。 */
+/** 宿主 Loader 条目 id，同时也是设置命名空间（与 host 段 ctx.fiber.entry.options.id 一致）。 */
 const NS = "vision-assist";
-const BRIDGE_PREFIX = "/api/dsh-vision-assist-settings";
+/** provider/model 下拉的数据来源：llm-pi-ai 的模型目录（只在镜像里读，不写）。 */
+const PI_NS = "llm-pi-ai";
 
-// 激活时序关键：settings.plugin.item 是设置 UI 挂载后才**迟声明**的。
-// 本插件若只依赖 slots，会在 boot 即激活、早于该插槽声明，导致卡片注册路径在此运行时不可靠。
-// 必须像 free-search 一样在 module 级 inject 里带上 commandUi，把激活推迟到 UI 就绪之后。
-const inject = ["slots", "commandUi"];
+// DSH 0.1.7 的客户端设置页把可配置卡片挂在 Plugins 面板的 `plugins.item` 列表插槽上；
+// 卡片的读写不再走自建 HTTP 桥，而是 configForms（设置域的基础服务）：
+//   ctx.configForms.get(NS)         → 本插件命名空间的表单作用域（读快照 + mutate 写入）
+//   ctx.configForms.whileServed([NS]) → 只在宿主确实提供该命名空间时注册卡片
+//   ctx.configForms.describe()      → 共享的 describe 镜像（读 llm-pi-ai 的模型目录）
+const inject = ["slots", "configForms"];
 
 const CSS = `
-.dshva-card{min-width:0;margin-bottom:8px;border:1px solid var(--dsw-alias-border-l2, #ddd);background:var(--dsw-alias-bg-layer-3, #fff);border-radius:8px;padding:12px 14px}
-.dshva-title{font-weight:600;margin-bottom:4px;color:var(--dsw-alias-label-primary, #eee)}
-.dshva-hint{color:var(--dsw-alias-label-secondary, #b0b0b0);font-size:12px;line-height:1.5;margin:0 0 8px}
-.dshva-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:7px 0;border-top:1px solid var(--dsw-alias-border-l2, #eee)}
+.dshva-card{min-width:0}
+.dshva-hint{color:var(--dsw-alias-label-secondary, #b0b0b0);font-size:12px;line-height:1.5;margin:0 0 10px}
+.dshva-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 0;border-top:1px solid var(--dsw-alias-border-l2, #eee)}
 .dshva-row:first-of-type{border-top:0}
 .dshva-meta{display:flex;flex-direction:column;min-width:0}
 .dshva-label{font-size:13px;color:var(--dsw-alias-label-primary, #eee)}
 .dshva-fieldhint{color:var(--dsw-alias-label-secondary, #b0b0b0);font-size:11px;margin-top:2px}
-.dshva-input{min-width:180px;padding:5px 8px;border:1px solid var(--dsw-alias-border-l2, #ccc);border-radius:6px;background:var(--dsw-alias-bg-layer-3, #fff);color:inherit;font-size:13px}
+.dshva-control{display:flex;align-items:center;gap:8px}
+.dshva-input{min-width:190px;padding:5px 8px;border:1px solid var(--dsw-alias-border-l2, #ccc);border-radius:6px;background:var(--dsw-alias-bg-layer-3, #fff);color:inherit;font-size:13px}
+.dshva-input:disabled{opacity:.5;cursor:not-allowed}
 .dshva-check{width:16px;height:16px;accent-color:var(--dsw-alias-accent, #4c8cff)}
-.dshva-input:disabled,.dshva-check:disabled{opacity:.5;cursor:not-allowed}
+.dshva-reset{border:0;background:none;color:var(--dsw-alias-label-secondary, #b0b0b0);font-size:12px;cursor:pointer;padding:2px 4px}
+.dshva-reset:disabled{opacity:.5;cursor:not-allowed}
+.dshva-tag{color:var(--dsw-alias-label-tertiary, #999);font-size:11px}
 `;
 
-/** 卡片内部设置 store（桥接 /describe、/mutate）。 */
-const listeners = new Set();
-let state = { status: "loading", optionsStatus: "loading", value: null, writable: false, revision: 0, busy: false, providers: [] };
+const LABELS = {
+	unavailable: "该插件当前未加载，暂时无法配置。",
+	readOnly: "本部署的设置为只读。",
+	saveFailed: "宿主没有接受这些值，已保留供你修改。",
+	save: "保存",
+	saving: "保存中…"
+};
 
-function setState(next) {
-	state = { ...state, ...next };
-	for (const listener of [...listeners]) listener();
+/** 布尔字段：SettingsFormModel 的字段转换只认文本，这里补一个 true/false 规格。 */
+function booleanField(field) {
+	return {
+		field,
+		format: (value) => (value === false ? "false" : "true"),
+		parse: (text) => ({ kind: "set", value: text === "true" })
+	};
 }
 
-async function bridgeFetch(path, payload) {
-	const response = await fetch(`${BRIDGE_PREFIX}/${path}`, {
-		method: "POST",
-		headers: { "content-type": "application/json" },
-		...(payload === undefined ? {} : { body: JSON.stringify(payload) })
-	});
-	return response.json();
+/** 从 describe 镜像里取出 llm-pi-ai 的 provider 目录，转成下拉用的结构。 */
+function providersOf(section) {
+	const providers = section?.providers;
+	if (providers === null || typeof providers !== "object") return [];
+	return Object.entries(providers).map(([id, info]) => ({
+		id,
+		models: Array.isArray(info?.models)
+			? info.models.map((model) => ({ id: model.id, input: Array.isArray(model.input) ? model.input : [] }))
+			: []
+	}));
 }
 
-async function refresh() {
-	try {
-		const data = await bridgeFetch("describe");
-		const view = data?.ok && Array.isArray(data.value?.namespaces) ? data.value.namespaces[0] : undefined;
-		if (view === undefined) {
-			setState({ status: "unavailable", value: null, writable: false, busy: false });
-			return;
-		}
-		setState({
-			status: "ready",
-			value: view.value ?? {},
-			writable: data.value.writable !== false,
-			revision: view.revision ?? 0,
-			busy: false
-		});
-	} catch {
-		setState({ status: "unavailable", value: null, writable: false, busy: false });
-	}
-}
-
-async function loadOptions() {
-	try {
-		const data = await bridgeFetch("options");
-		const providers = data?.ok && Array.isArray(data.value?.providers) ? data.value.providers : [];
-		setState({ providers, optionsStatus: "ready" });
-	} catch {
-		setState({ providers: [], optionsStatus: "unavailable" });
-	}
-}
-
-async function commit(field, value) {
-	if (state.status !== "ready" || state.busy) return;
-	setState({ busy: true });
-	try {
-		const data = await bridgeFetch("mutate", {
-			ns: NS,
-			ops: [{ op: "set", path: [field], value }],
-			...(typeof state.revision === "number" ? { expectedRevision: state.revision } : {})
-		});
-		if (data?.ok && data.value) {
-			setState({
-				value: data.value.value ?? {},
-				revision: data.value.revision ?? state.revision,
-				busy: false
-			});
-		} else {
-			// 写入失败（冲突/拒绝）→ 回读服务端最新值
-			await refresh();
-		}
-	} catch {
-		await refresh();
-	}
-}
-
-/** 一行配置项：左标签 + 右侧控件。 */
+/** 一行：左侧标签 + 说明，右侧控件。 */
 function Row(label, hint, control) {
 	return createElement("div", { className: "dshva-row" },
 		createElement("div", { className: "dshva-meta" },
@@ -104,116 +68,161 @@ function Row(label, hint, control) {
 		control);
 }
 
-/** 插件设置卡片：Settings → 插件（可配置标签页）里的 vision-assist 配置。 */
-function VisionAssistCard() {
-	const snapshot = useSyncExternalStore(
-		(listener) => {
-			listeners.add(listener);
-			return () => listeners.delete(listener);
-		},
-		() => state
-	);
-	useEffect(() => {
-		if (state.status === "loading") refresh();
-		// 每次都重取：provider/模型列表来自 llm-pi-ai，它的改动不会改本命名空间的 revision，
-		// 而 state 是模块级的（页面生命周期内常驻）。只按 "loading 才取" 会让下拉冻结在
-		// 打开页面那一刻的 settings.yaml —— 同步完模型后必须手动刷页面才看得到。
-		loadOptions();
-	}, []);
+/** 已覆盖时给自定义控件补一个「恢复默认」，与官方 SettingsValueField 的语义保持一致。 */
+function withReset(fieldState, onReset, control, disabled) {
+	return createElement("div", { className: "dshva-control" },
+		control,
+		fieldState?.overridden === true
+			? createElement("button", {
+				type: "button",
+				className: "dshva-reset",
+				disabled,
+				onClick: onReset
+			}, "恢复默认")
+			: null);
+}
 
-	if (snapshot.status !== "ready") {
-		return createElement("div", { className: "dshva-card" },
-			createElement("p", { className: "dshva-hint" },
-				snapshot.status === "unavailable"
-					? "vision-assist 设置命名空间未注册（插件可能未挂载），请重启 DSH 后查看。"
-					: "正在读取 vision-assist 配置…"));
+/**
+ * 插件设置卡片：Plugins 面板里的一项，列表视图渲染一句话，详情视图渲染表单。
+ * props 由插槽系统注入（inject 面 + 视图），见 dsh-client-ui-renderer。
+ */
+function VisionAssistCard(props) {
+	if (props.view === "summary") {
+		return "无视觉主模型收到图片时，交给下面选定的多模态模型识别（vision_recognize 工具）。";
 	}
-	const value = snapshot.value ?? {};
-	const writable = snapshot.writable;
-	const revision = String(snapshot.revision ?? 0);
-	const commitTimeout = (current) => (event) => {
-		const parsed = Number(event.target.value);
-		if (!Number.isFinite(parsed)) {
-			event.target.value = String(current);
-			return;
-		}
-		const next = Math.min(600000, Math.max(1000, Math.round(parsed)));
-		if (next !== current) commit("timeoutMs", next);
-		event.target.value = String(next);
-	};
-	const disabled = !writable || snapshot.busy;
-	const enabled = value.enabled !== false;
-	// 下拉数据：当前 provider + 其带识图能力的模型（无则回退全部，并保证当前值在列）。
-	const providers = snapshot.providers ?? [];
-	const currentProvider = value.provider ?? "codemaker";
-	const providerInfo = providers.find((p) => p.id === currentProvider);
-	let modelOptions = (providerInfo?.models ?? []).filter((m) => (m.input ?? []).includes("image"));
-	if (modelOptions.length === 0) modelOptions = providerInfo?.models ?? [];
-	const currentModel = value.model ?? "gemini-3.7-flash";
-	if (!modelOptions.some((m) => m.id === currentModel)) modelOptions = [{ id: currentModel, input: [] }, ...modelOptions];
-	const renderOption = (m) => createElement("option", { key: m.id, value: m.id }, m.id);
-	return createElement("div", { className: "dshva-card", key: revision },
-		createElement("div", { className: "dshva-title" }, "dsh-vision-assist（视觉助手）"),
+	const state = props.useVisionAssistCard((snapshot) => snapshot);
+	const pi = props.useVisionAssistOptions((snapshot) => snapshot?.view?.namespaces?.find((row) => row.ns === PI_NS));
+	const disabled = !state.writable;
+	const providers = providersOf(pi?.value);
+
+	const currentProvider = state.provider?.text ?? "";
+	const providerInfo = providers.find((provider) => provider.id === currentProvider);
+	let models = (providerInfo?.models ?? []).filter((model) => model.input.includes("image"));
+	if (models.length === 0) models = providerInfo?.models ?? [];
+	const currentModel = state.model?.text ?? "";
+	if (currentModel !== "" && !models.some((model) => model.id === currentModel)) {
+		models = [{ id: currentModel, input: [] }, ...models];
+	}
+
+	return createElement(SettingsForm, {
+		labels: LABELS,
+		state,
+		onSave: props.save,
+		onDiscard: props.discard
+	},
 		createElement("p", { className: "dshva-hint" },
-			"无视觉主模型收到图片时，由下面的多模态模型代为识别（vision_recognize 工具）。改动即时生效，无需重启。"),
+			"无视觉主模型收到图片时，由下面的多模态模型代为识别（vision_recognize 工具）。改动点「保存」后即时生效，无需重启。"),
 		Row("启用识别接管", "关闭后完全不接管：主模型按原样收到图片，不注入识别指引，也不提供 vision_recognize 工具",
 			createElement("input", {
 				className: "dshva-check",
 				type: "checkbox",
-				checked: enabled,
+				checked: state.enabled?.text === "true",
 				disabled,
-				onChange: (event) => commit("enabled", event.target.checked)
+				onChange: (event) => props.edit("enabled", event.target.checked ? "true" : "false")
 			})),
-		Row("识别模型 provider", "可选自 pi-ai 设置的 provider",
-			createElement("select", {
-				className: "dshva-input",
-				value: currentProvider,
-				disabled,
-				onChange: (event) => commit("provider", event.target.value)
-			}, ...providers.map((p) => createElement("option", { key: p.id, value: p.id }, p.id)))),
-		Row("识别模型 model", "带识图能力的多模态模型",
-			createElement("select", {
-				className: "dshva-input",
-				value: currentModel,
-				disabled,
-				onChange: (event) => commit("model", event.target.value)
-			}, ...modelOptions.map(renderOption))),
+		Row("识别模型 provider", "来自 llm-pi-ai 配置的 provider",
+			withReset(state.provider, () => props.resetField("provider"),
+				createElement("select", {
+					className: "dshva-input",
+					value: currentProvider,
+					disabled: disabled || providers.length === 0,
+					onChange: (event) => props.edit("provider", event.target.value)
+				},
+				providers.length === 0
+					? createElement("option", { value: currentProvider }, currentProvider || "（llm-pi-ai 未配置 provider）")
+					: providers.map((provider) => createElement("option", { key: provider.id, value: provider.id }, provider.id)),
+				providers.length > 0 && !providers.some((provider) => provider.id === currentProvider) && currentProvider !== ""
+					? createElement("option", { value: currentProvider }, currentProvider)
+					: null),
+				disabled)),
+		Row("识别模型 model", "优先列出声明了图片输入的多模态模型",
+			withReset(state.model, () => props.resetField("model"),
+				createElement("select", {
+					className: "dshva-input",
+					value: currentModel,
+					disabled: disabled || models.length === 0,
+					onChange: (event) => props.edit("model", event.target.value)
+				},
+				models.length === 0
+					? createElement("option", { value: currentModel }, currentModel)
+					: models.map((model) => createElement("option", { key: model.id, value: model.id }, model.id))),
+				disabled)),
 		Row("识别超时（毫秒）", "1000–600000，默认 120000",
-			createElement("input", {
-				className: "dshva-input",
-				type: "number",
-				min: 1000,
-				max: 600000,
-				step: 1000,
-				defaultValue: String(value.timeoutMs ?? 120000),
-				disabled,
-				onBlur: commitTimeout(value.timeoutMs ?? 120000)
-			})),
-		writable ? null : createElement("p", { className: "dshva-hint" }, "当前配置不可写（只读模式）。"));
+			withReset(state.timeoutMs, () => props.resetField("timeoutMs"),
+				createElement("input", {
+					className: "dshva-input",
+					type: "text",
+					inputMode: "numeric",
+					value: state.timeoutMs?.text ?? "",
+					disabled,
+					onChange: (event) => props.edit("timeoutMs", event.target.value)
+				}),
+				disabled)),
+		state.invalid ? createElement("p", { className: "dshva-hint" }, "有字段填得不合法，请修正后再保存。") : null);
+}
+
+/** 卡片控制器：把设置域的表单作用域包成一个快照 store，供插槽注入。 */
+class CardController {
+	constructor(ctx) {
+		const scope = ctx.configForms.get(NS);
+		this.form = new SettingsFormModel(scope, [
+			booleanField("enabled"),
+			settingsTextField("provider"),
+			settingsTextField("model"),
+			settingsNumberField("timeoutMs")
+		]);
+		this.store = this.form.bind(() => ({
+			...this.form.shell(),
+			enabled: this.form.field("enabled"),
+			provider: this.form.field("provider"),
+			model: this.form.field("model"),
+			timeoutMs: this.form.field("timeoutMs")
+		}));
+		// 共享 describe 镜像：read-only 数据源（llm-pi-ai 的 provider/模型目录）。
+		this.options = ctx.configForms.describe();
+	}
+	/** 插槽注入面：hooks 里的 store 会被渲染器绑成 useXxx 选择器 prop，其余是表单动作。 */
+	inject() {
+		return {
+			hooks: {
+				visionAssistCard: this.store,
+				visionAssistOptions: this.options
+			},
+			...this.form.actions()
+		};
+	}
+	dispose() {
+		this.form.dispose();
+	}
 }
 
 function apply(ctx) {
 	ctx.effect(() => {
 		const tagId = "dsh-vision-assist/card.css";
-		if (typeof document !== "undefined" && document.querySelector(`style[data-plugin-css=${JSON.stringify(tagId)}]`) === null) {
-			const tag = document.createElement("style");
-			tag.dataset.pluginCss = tagId;
-			tag.textContent = CSS;
-			document.head.appendChild(tag);
-			return () => tag.remove();
-		}
+		if (typeof document === "undefined") return;
+		if (document.querySelector(`style[data-plugin-css=${JSON.stringify(tagId)}]`) !== null) return;
+		const tag = document.createElement("style");
+		tag.dataset.pluginCss = tagId;
+		tag.textContent = CSS;
+		document.head.appendChild(tag);
+		return () => {
+			tag.remove();
+		};
 	}, "dsh-vision-assist: settings card styles");
-	// 挂官方插槽 settings.plugin.item（设置 → 插件 → 可配置标签页）。
-	// 用 free-search 的直连 root 注册方式（其卡片在本部署已验证显示）。
-	// 数据读写仍走自建 bridge（/api/dsh-vision-assist-settings），不依赖 settingsScope 的配置 API。
-	ctx.slots.inject("settings.plugin.item", () =>
-		ctx.slots.register({
-			name: "settings.plugin.item",
-			key: NS,
-			id: "dsh-vision-assist",
-			order: 130,
-			inject: () => ({})
-		}, VisionAssistCard));
+
+	const card = new CardController(ctx);
+	ctx.effect(() => () => {
+		card.dispose();
+	}, "dsh-vision-assist: card form subscription");
+
+	// 只在宿主确实提供 vision-assist 命名空间时注册卡片：插件没挂上就不显示空壳。
+	ctx.effect(() => ctx.configForms.whileServed([NS], () => ctx.slots.inject("plugins.item", () => ctx.slots.register({
+		name: "plugins.item",
+		id: NS,
+		order: 130,
+		label: () => "视觉助手 vision-assist",
+		inject: () => card.inject()
+	}, VisionAssistCard))), "dsh-vision-assist: settings card");
 }
 
 export { apply, inject };

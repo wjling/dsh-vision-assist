@@ -1,7 +1,7 @@
 {
   "name": "dsh-vision-assist",
-  "version": "1.0.0",
-  "description": "DeepSeek Harness 视觉助手插件：给没有视觉能力的模型配一个可随时切换的多模态识别模型。输入框图片自动落盘并改写为文本提示，主模型调用 vision_recognize 工具即可完成看图；识别模型在 settings 的 vision-assist 命名空间热更新切换。",
+  "version": "1.1.0",
+  "description": "DeepSeek Harness 视觉助手插件：给没有视觉能力的模型配一个可随时切换的多模态识别模型。输入框图片自动落盘并改写为文本提示，主模型调用 vision_recognize 工具即可完成看图；识别模型在插件设置卡片里热更新切换。",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
@@ -18,10 +18,11 @@
     "LICENSE"
   ],
   "scripts": {
-    "build:client": "npx -y esbuild@0.25.5 src/client.js --bundle --format=cjs --platform=browser --external:react --external:react/jsx-runtime --outfile=lib/client.js --banner:js='window.__ModuleLoader__.load({id:\"dsh-vision-assist\",factory:(require)=>{var module={exports:{}};var exports=module.exports;' --footer:js='exports.apply=apply;exports.inject=inject;return module.exports;}});'"
+    "build:client": "npx -y esbuild@0.25.5 src/client.js --bundle --format=cjs --platform=browser --external:react --external:react/jsx-runtime --external:@deepseek-ai/dsh-client-ui-primitives --outfile=lib/client.js --banner:js='window.__ModuleLoader__.load({id:\"dsh-vision-assist\",factory:(require)=>{var module={exports:{}};var exports=module.exports;' --footer:js='exports.apply=apply;exports.inject=inject;return module.exports;}});'"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=20",
+    "dsh": ">=0.1.7-alpha.1"
   },
   "dsh": {
     "bundle": {
@@ -29,23 +30,20 @@
     },
     "client": {
       "inject": [
-        "@deepseek-ai/dsh-client-runtime"
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-ui-plugin-manager"
       ],
       "platform": "web"
     }
   },
-  "dependencies": {
-    "@deepseek-ai/schemastery": "^3.18.1"
-  },
   "peerDependencies": {
-    "@deepseek-ai/dsh-llm": ">=0.1.0-rc.8",
-    "@deepseek-ai/dsh-settings": ">=0.1.0-rc.8",
-    "@deepseek-ai/dsh-tools": ">=0.1.0-rc.8"
+    "@deepseek-ai/dsh-llm": ">=0.1.7-alpha.1",
+    "@deepseek-ai/dsh-tools": ">=0.1.7-alpha.1",
+    "@deepseek-ai/schemastery": ">=3.18.3"
   },
   "devDependencies": {
-    "@deepseek-ai/dsh-llm": "0.1.0-rc.8",
-    "@deepseek-ai/dsh-settings": "0.1.0-rc.8",
-    "@deepseek-ai/dsh-tools": "0.1.0-rc.8"
+    "@deepseek-ai/dsh-llm": "0.1.7-alpha.1",
+    "@deepseek-ai/dsh-tools": "0.1.7-alpha.1"
   },
   "keywords": [
     "deepseek-harness",
